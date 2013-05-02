@@ -1,0 +1,366 @@
+%
+% Patrick Chase
+% Pranav Maddi
+% STAT 365 Final Project
+%
+\documentclass[12pt]{article}
+
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{verbatim}
+
+\title{Salary Prediction}
+\author{Patrick Chase and Pranav Maddi}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+In this experiment, advertisements for jobs in the UK were used to predict job salaries. The data set came from the website Kaggle, which is a platform for predictive modeling competitions. In the data set, there were 244,768 instances of 12 variables, including a full text description of the job advertisements. To build the best predictive model, preliminary tests were run on the data to decide, which variables to include, as well as how to handle the raw text. To turn the raw text into structured variables that regression could be performed on, a bag-of-words model was used. Once the bag-of-words model was made for the entire text, the dimensionality of the data was reduced by removing sparse terms and principal component analysis. The data reduced by either removing sparse terms or PCA, was then used to build models of different regression methods. Linear, tree, randomforest, and knn, were all tested on the data. In the end, the performance of each one of these methods was compared to see which model performed the best. It was found that randomforest, on the most frequently occurring terms produced the best model. This model was then used on the “test” data release by Kaggle to see how the model would have performed in the competition.
+\end{abstract}
+
+\clearpage
+\tableofcontents
+\clearpage
+
+\section{Data Set}
+
+The data set was posted by Kaggle and can be found here: http://www.kaggle.com/c/job-salary-prediction/data
+
+\subsection{Training Data}
+
+\begin{itemize}
+\item Size: 244,768 instances of 12 variables
+\item Used to train and test different models
+\end{itemize}
+
+
+\subsection{Testing Data}
+
+\begin{itemize}
+\item Size: 122,464 instances of 12 variables
+\item Used to test best model
+\end{itemize}
+
+\subsection{Partitioning Data}
+
+The training data was too big to use the entire data set to build the models, so a random sample of size 20,000 was taken to train the models and a sample of 10,000 was used to test the models.
+
+
+\section{Preprocessing Data}
+
+
+\subsection{Transforming Salaries}
+
+First, the distribution of the salaries was examined to see if it was normally distributed.
+
+\begin{center}
+\includegraphics[width=4in]{Histogram_of_Salaries.jpg}
+\end{center}
+
+Since the distribution of salaries is skewed right, the salaries needed to be transformed to make the distribution normal for prediction by the linear method. A log transformation was chosen to make the distribution approximately normal.
+
+\begin{center}
+\includegraphics[width=4in]{histLogSal.jpg}
+\end{center}
+
+The log-transformed distribution of salaries looks much better. Since the log-transformed distribution is approximately normal, this transformation was used on the data before training and testing the linear model. The tranformation was not needed before running the tree-based and KNN methods because these regression methods are flexible enough to handle the original skewed-right distribution of salaries.
+
+\subsection{Categorical Variables}
+
+To process the data into data that could be used to build a model, preliminary analysis was performed on each categorical variable to decide whether or not to include it in the final model. To determine if a categorical variable should be included in the final model, a box plot of the salaries was made for each category. If the distributions appeared different in the box plots, the categorical variable was included because the category has some predictive power, since the distribution of salaries in each category is different. In addition, if two categories had box plots that looked almost the same, these two categories were merged into one. In particular, it had to be decided how to handle the ContractTime variable, the ContractType variable, the Company, and the Location variable. 
+
+\subsubsection{ContractType}
+
+\begin{center}
+\includegraphics[width=4in]{ContractType.pdf}
+\end{center}
+
+In the figure above, the boxplots for fullTime and partTime are clearly very different. This means that the ContractType variable must have some predictive power. So, the ContractType varaible was included as a variable in the regression models.
+
+\subsubsection{ContractTime}
+
+\begin{center}
+\includegraphics[width=4in]{ContractTime.pdf}
+\end{center}
+
+The varaible ContractType seems like it could be a good predictor as well because the box plots for the three categories in ContractTime have some differences. So, ContractTime was included in the models as well.
+
+\subsubsection{Location}
+
+The NormalizedLocation variable in the data set had thousands of categories to begin with. Clearly this was too many to perform regression on, so the number of categories had to be reduced without losing the information held in the location. Location was thought to have a strong correlation on the value of a salary because a salary is strongly dependent on the cost of living of the area around a job, and the types of industries found in that area. To reduce the number of categories, a look-up was performed in the Location Tree provided by Kaggle. This look-up returned the second level or “state” level of the tree that had the given town in it. The names of the towns were then replaced with the “states” they were in, and this categorical variable was used in the prediction. There were 32 states in the second level of the tree, so there were 32 levels of the categorical variable Location.
+
+\subsubsection{JobCategory}
+
+Another categorical variable included in the data set was Category, which held the job category of a given job. 
+
+\begin{center}
+\includegraphics[width=4.5in]{Category.pdf}
+\end{center}
+
+The varaible Category clearly has a large influence on the Salary. This can be seen because someone with a ``Travel Job" (far right) receives a much lower salary than someone with a ``Accounting and Finance Job" (far left). So, the Category variable should clearly be included. However, there are a lot of categories in the variable. One way to reduce the number of categories is to combine categories that have the same distribution into a single category. To determine which categories have the same distribution, the box plots were sorted by their median. 
+
+\begin{center}
+\includegraphics[width=4.5in]{CategorySorted.pdf}
+\end{center}
+
+From this plot it was much easier to determine which categories should be combined. For example, ``Travel Jobs" and the category to its left (Hospitality and Catering Jobs) have almost identical box plots. So, these categories were combined into one factor. In the end, the following categories were combined (Travel Jobs, Hospitality and Catering Jobs), (HR and Recruitment Jobs, Creative $\&$ Design Jobs),  (Consultancy Jobs, Engineering Jobs, PR Advertising and Marketing Jobs), and (Energy Oil and Gas Jobs, IT Jobs).
+
+\subsection{Turing Full Text into Variables}
+
+Once, the categorical variables were handled, the full text of the ad had to be described with variables. 
+
+\subsubsection{Bag-of-words Model}
+
+One way to describe text with variables is with a “bag-of-words.” In this method, occurrences of various words are recorded for each piece of text. In this way, a paragraph of text can be turned into a vector that describes the occurrences of various words within the paragraph. All of the vectors for the ads were then combined into a “DocumentTermMatrix.” 
+
+To analyze the raw text, the “tm” package in R was used. Specifically, functions in the “tm” package were used to make all the letters in the text lowercase, remove the punctuation from the text, and remove english “stopwords,” which are words that are unlikely to have any predictive power, such as “and,” “or,” and “any.” Once this processing was completed, the DocumentTermMatrix was made using binary weighting. This means that the row vector for an ad would have a ‘1’ in the column for a word if that word occurred in the text at least once, and a ‘0’ otherwise. This weighting mechanism was chosen for both simplicity and the fact that the number of occurrences of a word beyond the first didn’t seem to affect the salary very much.
+
+\subsubsection{Other Variables to Describe Text}
+
+Other variables to describe the text beyond just the occurrence of certain words were also experimented with. For example, in the Spam data set, there were not only the occurrence of certain keywords recorded, but there were also variables such as “longest string of consecutive capital letters,” which were found to be very good predictors. Very few of the ads had long strings of capital letters, so this variables wasn’t considered. However, it was possible the length of the ad could help predict the final salary.
+
+
+\begin{center}
+\includegraphics[width=5in]{LengthofAd.pdf}
+\end{center}
+
+After plotting the LengthOfAd against the Salary, it was clear there wasn't a strong correlation between the two variables. So,the LengthoOfAd was not included as a variable to describe the text in the final model.
+
+\section{Reducing Dimensionality of the Data}
+
+The bag-of-words matrix made from the data was very large and very sparse. This was because there was a column for every word that was found in any advertisement in the training set. So, before a regression could be performed the dimension of the data had to be reduced.
+
+\subsection{Removing Sparse Terms}
+
+The first method used to reduce the dimension of the bag-of-words was removing the sparse terms. This means that the terms that occurred least often throughout all the advertisements were removed from the data. This is a relatively good way to reduce the dimension of the data, because words that only occur a few times throughout the ads aren't likely to be great predictors. For example, if the name of a company ``CompanyX" comes up in an add for ``CompanyX," but not in any of the other ads, this variables won't be a good predictor of the other ads. However, the words with the highest frequency counts aren't necessarily the best predictors either. This is because generic job advertisement words such as ``apply" come up in almost every ad and therefore aren't the best predictors. A sparsity factor of 0.85 was used, which left about 100 words depending on the words and frequencies present in the training sample.
+
+\subsubsection{Finalized Data Matrix}
+
+Once the dimension of the bag-of-words matrix was reduced, the categorical variables were added to the matrix to get the final training data frame for the regression methods. A picture of the last few columns of the first ten rows is shown below.
+
+\begin{center}
+\includegraphics[width=6in]{ExDF.jpg}
+\end{center}
+
+The first three columns are the last of 94 words for which occurrences were recorded (there are 91 columns of word occurrences to their left). Then there are the 4 categorical varaibles, followed by the salary of the advertisement. Note: ``UK" was given as the location if either no location was provided or ``UK" was the lowest level location provided.
+
+\subsection{Principal Component Analysis}
+
+In addition, Principal Component Analysis was experimented with as a technique of reducing the dimension of the ``bag-of-words" matrix. Instead of removing the sparse terms to reduce the number of variables, PCA was performed using the ``prcomp" package. The categorical varaibles were then attached to the reduced PCA matrix describing the FullText, and this data frame was used to train and test the regressions.
+
+\section{Regression Methods for Remove-Spare-Terms Method of Dimensionality Reduction}
+
+Different regression methods were tested on the final data frame explained in section 3.2. 
+
+\subsection{Linear Regression}
+
+The first regression method tested was a standard linear regression. For this regression the ``lm" package in R was used. In addition, the log-transformed salaries were used to train and predict. These predictions were then transformed back into salaries in pounds to calculate the mean squared errors.
+
+\subsubsection{Linear Regression Performance}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+Linear Regression & 9420 & 9937 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+\subsection{Lasso}
+
+To remove extra variables from the linear model, LASSO regularization was used. For this, the `` LARS" package was used, along with the transformed salary values. The error rates increased with this method because the categorical variables had to be removed to allow the function to run.
+
+\subsubsection{Lasso Performance}
+
+\begin{center}
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+  LASSO & 13929 & 14204 \\ 
+   \hline
+\end{tabular}
+\end{center}
+
+\subsection{Knn}
+
+The ``kknn" R package was used to perform regression using the k-nearest neighbors algorithm. This works simply by assigning the predicted value to be the average values of its k nearest neighbors. Note that the inputs were normalized to avoid skewing the predictions.
+
+\subsubsection{Knn Performance}
+
+\begin{center}
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+KNN-1 & 0 & 14811 \\ 
+KNN-3 & 4100 & 13153 \\ 
+KNN-5 & 5918 & 12428 \\ 
+KNN-7 & 6865 & 12069 \\ 
+KNN-12 & 8093 & 11686 \\ 
+KNN-20 & 8942 & 11504 \\ 
+KNN-30 & 9768 & 12425 \\ 
+   \hline
+\end{tabular}
+\end{center}
+
+\subsection{Tree}
+
+The next method used was regression trees. The ``rpart" library was used for this. For the tree-based methods, the data were not normalized or transformed, since the models are extremely flexible.
+
+\subsubsection{Tuning Tree}
+
+\begin{center}
+\includegraphics[width=5in]{TuningTree.pdf}
+\end{center}
+
+This graph shows how the error rate changes with the size of the tree. The tree size that gave the smallest MSE was 20, so the original tree was pruned to this size before prediction.
+
+\subsubsection{Example Tree}
+
+\begin{center}
+\includegraphics[width=6in]{TREEEX1.pdf}
+This tree is pruned at the best cp value found above.
+\end{center}
+
+This is an example of a tree that was built from the training data. It contains a lot of information about the salary data. First, the categorical variable Category is at the top of the tree meaning it is very important for predicting the salaries. Job categories such as ``Accounting and Finance Jobs" increase the prediction, while other categories decrease it. In addition, the Location categorical variable is quite important, as it appears at the second level of the tree. Locations such as ``London" and ``East Anglia" increase the prediction, while others decrease it. At the third level of the tree, words from the FullDescription start to come up. The presence of words such as ``senior" and ``manage" is related to higher paying jobs, while words like ``customer" are related to lower paying jobs. In addition, farther down the tree, ContractTime and ContractType come up illustrating that these categorical variables help predict the salaries as well.
+
+\subsubsection{Tree Performance}
+
+%\begin{table}[ht]
+\begin{center}
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+Tree & 10621 & 10900 \\ 
+   \hline
+\end{tabular}
+\end{center}
+%\end{table}
+
+
+\subsection{Random Forest}
+
+The last regression method used was the RandomForest method. In this method, a group of uncorrelated trees is constructed from the training data and the average of all the trees' predictions is used as the final prediction. This method is often better than just using one tree, because it is very easy for a single tree to overfit the training data. The use of multiple trees decreases the chance of overfitting the training data. The ``randomForest" package in R was used to build the model.
+
+\subsubsection{Tuning Random Forest}
+
+
+
+\begin{center}
+\includegraphics[width=5in]{RFtunBest.pdf}
+\end{center}
+
+To tune the RandomForest model, mtrys (the number of categorical input variables) was held constant, while the number of trees was varied for different values of mtrys. The best combination of the two parameters, which in this case was 150 trees and mtrys = 5, was then used to build the final model.
+
+\subsubsection{Random Forest Importance}
+
+Here, the categorical variables are capitalized, while the words from the bag-of-words model are lowercase.
+
+\begin{center}
+\includegraphics[width=6in]{impRF.pdf}
+\end{center}
+
+\subsubsection{Random Forest Performance}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+Random Forest & 4165 & 9564 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+\section{Regression Methods with PCA}
+
+In addition, the linear regression and randomForest methods were tested on the PCA-reduced data frame.
+
+\subsection{Linear Regression}
+
+The same general strategy was used for the linear model as before. The ``lm" package was used, and the salaries were log-transformed.
+
+\subsubsection{Linear Regression Performance}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+Linear Regression + PCA & 10274 & 10288 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+\subsection{Random Forest}
+
+In addition, the randomForest method was tested on the PCA-reduced data frame. The ``randomForest" package was used.
+
+\subsubsection{Random Forest Performance}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+Random Forest + PCA & 5008 & 9975 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+\section{Results}
+
+\begin{center}
+\includegraphics[width=6in]{results.png}
+\end{center}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & Training MSE & Test MSE \\ 
+  \hline
+Random Forest + PCA & 5008 & 9975 \\ 
+Random Forest & 4165 & 9564 \\ 
+Linear Regression & 9420 & 9937 \\ 
+Linear Regression + PCA & 10274 & 10288 \\ 
+Tree & 10621 & 10900 \\ 
+KNN-3 & 4100 & 13153 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+\subsection{Comparison of Models}
+
+The graph and table above show the mean squared errors on the training and test data for the different methods, and with the different methods of dimensionality reduction. All of the models beat the mean benchmark, but KNN only did by a little. KNN most likely performed poorly on this data set because the data was so sparse. The simple tree model did better than KNN, but worse than the random forest and the linear model. However, the tree method is very interpretable and easy to explain. From the picture of the tree in 4.4.2 it is easy to see which variables are important in predicting the salaries and how the prediction is made. The linear model did surprisingly well, and acheived an error rate of under 10,000 on both the training and testing data. This is most likely due to the careful handling of the categorical input varaibles in the preprocessing. The best method was the randomForest. This is most likely because the randomForest method is a good method to fit the sparse data because of its flexibility. In addition, the use of many trees makes the prediction more accurate and less variable. The randomForest method was not only the most accurate, but the importance plot makes its fairly interpretable, as well. From the importance plot it is easy to see, which variables were the most important and which were not as important.
+
+The randomForest with PCA and Linear with PCA both performed a little worse than their non-PCA counterparts. While the PCA can decrease the time it takes to build the models, the interpretability of the model is lost. This is because instead of each column in the ``bag-of-words" corresponding to a word in the advertisement text, each column correspond to a principal component. So, when these components come up in the importance plot, the information of which words are the most important in the prediction is lost.
+
+\subsection{Variables that Were the Best Predictors}
+\label{sec:predictors}
+After excluding infrequent words from the bag-of-words, there remained 100-200 input variables from the job description that correspond to certain words. In addition to these words, there were a number of categorical variables included with the description, including what field the job is in, the location of the job, and the duration of the assignment. By looking at the tree after pruning, as well as the importance plot from the random forest, it is apparent that only a few factors are good predictors for the salary of a job. 
+
+The most important factor was the category field, suggesting that the sector of a job is critical to pay, and this is consitent with intuition. After the category, postings inluding ``senior," ``project" and ``manage" tend to cause higher salaries. This is intuitive as well, since leadership roles in a company would be expected to have higher salaries. It is interesting to note that these facors are still an order of magnidude less important to pay rate than the industry. Similarly as important as these key-words is the location of the job. For instance, jobs in London tend to have a higher salary than jobs in other regions.
+
+Other important variables include the categorical variables Contract Type and Contract Time, which specify whether the work is full-time or part-time, and permanent or temporary. It is intuitive that these are good predictors of salary since they limit the number of hours one will earn in a year, significantly affecting the salary.
+
+\section{Conclusion and Further Work}
+
+The best model in terms of accuracy on the test data was the randomForest method without principal component analysis. This method was also very interpretable and made very quick predictions on the test set. After determining that this was the best model, it was tested on the test data from the Kaggle competition. A score of 10288 was obtained, which put the model in 86th place out of 294 teams. 
+
+One way the model could have been improved was to consider ``stems" of words instead of the entire word. This would keep words like ``manage" and ``management" from being treated different. In addition, bigrams and trigrams could have been considered. This could definitely improve the model because ``investment bank" has a different meaning than ``investment" and ``bank" coming up in different places in the ad. Last, the Knn model would most likely be improved by defining a different definition of ``distance." For example, the inner product of the vectors for each advertisement may be a better way to find the most similar advertisement, than the euclidean distance.
+
+Analyzing the raw text of the advertisements was quite hard. However, it was also evident that there was a lot of useful information in the text. By applying sophisticated language analysis and machine learning methods it is possible to extract this information and use raw text for prediction in a variety circumstances.
+
+\end{document}
